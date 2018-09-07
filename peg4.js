@@ -50,20 +50,23 @@ const rules = {
   }
 }
 
-/*
+
 const reducers = {
-  additive: 
+  additive: (str, val, add) => val + add,
+  additiveSuffix: (str, v) => v == null ? 0 : v[0],
+  multitive: (str, val, mul) => val * mul,
+  multitiveSuffix: (str, v) => v == null ? 1 : v[0],
 
-  additiveSuffix: (
+  primary: (str, [variant, args]) => ([
+    val => val,
+    decimal => decimal,
+  ][variant])(...args),
 
-  primary: [
-    (lparen, val, rparen) => val
-    decimal => decimal
-  ],
+  decimal: str => +str,
+}
 
-  decimal: str => +str
-}*/
-
+// A real implementation of this would use a tree. I have one of those; but
+// this is fine in a POC.
 class IntervalTreeMock {
   // entries: Interval[]
   constructor(entries = []) {
@@ -141,6 +144,9 @@ const makeCompiler = (_str, startRule) => {
       pos: startPos, // only relevant if ok=true.
       peeked: startPos,
       error: null,
+
+      accumulator: [],
+
       
       _peek(pos) { // absolute position.
         if (pos > this.peeked) {
@@ -168,12 +174,14 @@ const makeCompiler = (_str, startRule) => {
           this.error = `at ${this.pos} expected '${expect}' got '${actual}'`;
         }
         this.pos += expect.length;
+        // Should I add the literal to the parsed data ...?
         return this;
       },
 
       rule(ruleName) {
         if (!this.ok) return this;
-        tryRule(ruleName, this);
+        const childValue = tryRule(ruleName, this);
+        if (this.ok) this.accumulator.push(childValue)
         return this;
       },
 
@@ -184,12 +192,26 @@ const makeCompiler = (_str, startRule) => {
 
       optional(fn) {
         const r1 = fn(this.push())
-        return r1.ok ? r1 : this
+        if (r1.ok) {
+          this.accumulator.push(r1.accumulator)
+          return r1
+        } else {
+          this.accumulator.push(null)
+          return this
+        }
       },
 
-      or(opt1, opt2) { // TODO: this should probably be varadic.
-        const r1 = opt1(this.push())
-        return r1.ok ? r1 : opt2(this)
+      or(...args) { // TODO: this should probably be varadic.
+        for (let i = 0; i < args.length; i++) {
+          const child = args[i](this.push())
+          if (child.ok) {
+            this.accumulator.push([i, child.accumulator])
+            return child
+          }
+        }
+        this.ok = false
+        this.error = 'or() options exhausted'
+        return this
       },
     };
   }
@@ -213,7 +235,7 @@ const makeCompiler = (_str, startRule) => {
       reader.pos = base + len
 
       console.log(`-> from memo! (ok=${ok}, end=${base+len} peeked=${peeked} content=${str.slice(start, base+len)})`);
-      return //memo.value;
+      return value;
     }
 
     // Evaluate.
@@ -228,10 +250,15 @@ const makeCompiler = (_str, startRule) => {
     // - If ok, final position from result
     // - If error, error message from result
     // - Peek amount from childReader.
+
+    let value = null    
     if (result.ok) {
       const peek = childReader.peeked - result.pos
-      console.log(`rule ${ruleName} passed consuming '${str.slice(start, result.pos)}' (pos ${start} length ${result.pos - start}${peek ? ` + peek ${peek}` : ''})`);
       reader.pos = result.pos;
+      // console.log(ruleName, 'childreader accumulator', childReader.accumulator)
+      value = reducers[ruleName](str.slice(start, result.pos), ...childReader.accumulator)
+      childReader.value = value
+      console.log(`rule ${ruleName} passed consuming '${str.slice(start, result.pos)}' (pos ${start} length ${result.pos - start}${peek ? ` + peek ${peek}` : ''}) to value ${value}`);
     } else {
       console.log('rule failed:', reader.error);
       reader.ok = false;
@@ -243,9 +270,11 @@ const makeCompiler = (_str, startRule) => {
     memoSet(ruleName, reader.start, childReader.peeked, {
       ok: result.ok,
       error: result.error,
+      value: value,
       len: reader.pos - reader.start,
-      value: semantics(ruleName, str.slice(start, result.pos))
     });
+
+    return value
   };
 
   return {
@@ -302,8 +331,9 @@ const makeCompiler = (_str, startRule) => {
 
 // apply('2*(3+4)', 'additive');
 // const c = makeCompiler('2*(3+4)', 'additive')
+// const c = makeCompiler('1+2', 'additive')
 // c.evaluate()
-// c.evaluate()
+// console.log(c.evaluate())
 //apply('(1+2)*3', 'additive');
 //apply('1+2', 'additive');
 

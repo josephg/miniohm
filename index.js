@@ -26,7 +26,7 @@ var applyChange = function(ctx, oldval, newval) {
 
 function bind(elem) {
   const ctx = {
-    content: '',
+    content: elem.value,
     get() { return this.content; },
     insert(pos, text) {
       this.content = this.content.slice(0, pos) + text + this.content.slice(pos);
@@ -60,6 +60,7 @@ if (typeof window === 'object') {
 
   const setResult = result => {
     elem.style.backgroundColor = result.ok ? 'white' : '#faa'
+    document.getElementById('result').innerText = result.ok ? result.accumulator[0] : result.error
   }
 
   ctx.insert = (pos, text) => {
@@ -71,4 +72,5 @@ if (typeof window === 'object') {
     setResult(c.evaluate())
   }
 
+  setResult(c.evaluate())
 }
