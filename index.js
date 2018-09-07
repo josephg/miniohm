@@ -44,7 +44,6 @@ function bind(elem) {
 
   elem.addEventListener('input', (event) => {
     //console.log(elem.value, event);
-    // In a timeout so the browser has time to propogate the event's changes to the DOM.
     if (elem.value !== prevvalue) {
       prevvalue = elem.value;
       applyChange(ctx, ctx.get(), elem.value.replace(/\r\n/g, '\n'));
@@ -55,6 +54,21 @@ function bind(elem) {
 }
 
 if (typeof window === 'object') {
+  const elem = document.querySelector('textarea')
+  const ctx = bind(elem)
+  const c = makeCompiler(ctx.content, 'additive')
 
-  bind(document.querySelector('textarea'));
+  const setResult = result => {
+    elem.style.backgroundColor = result.ok ? 'white' : '#faa'
+  }
+
+  ctx.insert = (pos, text) => {
+    ctx.content = c.insert(pos, text)
+    setResult(c.evaluate())
+  }
+  ctx.remove = (pos, amt) => {
+    ctx.content = c.remove(pos, amt)
+    setResult(c.evaluate())
+  }
+
 }
